@@ -1,0 +1,18 @@
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# Python Cache
+__pycache__/
+*.py[cod]
+
+# Large raw dataset files (ignore heavy zip and raw images)
+data/asl-alphabet.zip
+data/asl_alphabet_train/
+data/asl_alphabet_test/
+
+# OS / IDE
+.DS_Store
+.vscode/
+.idea/
