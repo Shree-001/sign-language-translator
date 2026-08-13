@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # sign-language-translator
 =======
 # Real-Time Static ASL Sign Language Translator
