@@ -35,7 +35,7 @@ sign-language-translator/
 ### 1. Installation
 
 ```bash
-git clone <your-repo-url>
+git clone <Shree-001/sign-language-translator>
 cd sign-language-translator
 
 # Activate virtual environment
