@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-08-14 - feat
+- Added **Text-to-Sign Mode** (`src/text_to_sign.py`) for reverse ASL translation (text-to-fingerspelling slideshow with text overlay and speech synthesis).
+- Parses letters (A–Z), digits (0–9), and spaces to look up corresponding sign images deterministically from training dataset folders.
+- Displays characters in sequence at ~1 frame/second in a single OpenCV window with `Sign: X` banner overlays, followed by spoken audio synthesis.
+
 ## [1.1.4] - 2026-08-14 - fix
 - Applied a rolling 10-frame majority-vote filter (`collections.deque(maxlen=10)`) requiring \(\ge 7/10\) frame agreement before confirming predictions.
 - Eliminated per-frame raw classification jitter from over-triggering 8–10 speech calls during a single held sign.
