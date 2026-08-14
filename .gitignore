@@ -11,6 +11,8 @@ __pycache__/
 data/asl-alphabet.zip
 data/asl_alphabet_train/
 data/asl_alphabet_test/
+data/asl_digits/
+data/asl_digits_raw/
 
 # OS / IDE
 .DS_Store
