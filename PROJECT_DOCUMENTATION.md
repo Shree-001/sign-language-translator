@@ -34,7 +34,18 @@ To solve the challenge of visual gesture overlap between identical hand shapes (
       |  Random Forest (A-Z)    |             |  Random Forest (0-9)    |
       +-------------------------+             +-------------------------+
                   |                                       |
-                  v                                       v
+                  +-------------------+-------------------+
+                                      |
+                                      v
++-----------------------------------------------------------------------------------+
+|                     10-FRAME MAJORITY-VOTE STABILITY FILTER                       |
+|   collections.deque(maxlen=10) requires >= 7/10 frame agreement before confirming |
+|   prediction, eliminating single-frame raw classification jitter and speech spam. |
++-----------------------------------------------------------------------------------+
+                                      |
+                      +---------------+---------------+
+                      |                               |
+                      v                               v
       +-------------------------+             +-------------------------+
       | 2.0s Speech Cooldown    |             | Multi-Digit State       |
       | Single-Letter Output    |             | Machine (Hold & Buffer) |
@@ -49,7 +60,7 @@ To solve the challenge of visual gesture overlap between identical hand shapes (
                                           |
                                           v
 +-----------------------------------------------------------------------------------+
-|                  THREAD-SAFE TTS QUEUE & PER-UTTERANCE ENGINE                     |
+|                    THREAD-SAFE SPEECH WORKER & COM INITIALIZATION                 |
 |   pythoncom.CoInitialize() initializes STA COM apartment. speech_worker creates   |
 |   a fresh pyttsx3 engine per utterance inside queue loop and releases it (del).   |
 +-----------------------------------------------------------------------------------+
@@ -71,12 +82,12 @@ To solve the challenge of visual gesture overlap between identical hand shapes (
             |                       |
             v                       v
   +--------------------+   +--------------------+
-  | Hold Timer >= 1.0s?|   | Reset Hold Timer   |
+  | 7/10 Majority Vote |   | Reset Hold Buffer  |
   +--------------------+   +--------------------+
      |              |
    (Yes)           (No)
      |              |
-     v              +-----> [ Wait for hold ]
+     v              +-----> [ Wait for stabilization ]
 +-------------------------+
 | Append to Number Buffer |
 |  (e.g., "2" -> "23")    |
@@ -106,35 +117,12 @@ To solve the challenge of visual gesture overlap between identical hand shapes (
 ### Digit Classifier (`models/digit_classifier.pkl`)
 - **Evaluation Accuracy**: **99.43%** across 527 test samples (from 2,632 extracted landmark rows).
 
-```
-              precision    recall  f1-score   support
-
-           0       1.00      1.00      1.00        18
-           1       1.00      1.00      1.00        60
-           2       1.00      0.96      0.98        53
-           3       0.97      1.00      0.98        60
-           4       1.00      1.00      1.00        59
-           5       1.00      1.00      1.00        60
-           6       1.00      0.98      0.99        46
-           7       1.00      1.00      1.00        58
-           8       0.98      1.00      0.99        54
-           9       1.00      1.00      1.00        59
-
-    accuracy                           0.99       527
-```
-
 ---
 
 ## 5. Key Bug Fixes & Technical Refinements
 
 | Bug | Technical Root Cause | Resolution |
 | :--- | :--- | :--- |
+| **Over-Triggering Speech Jitter** | Classifier runs at ~30 FPS; tiny raw per-frame classification fluctuations pushed 8–10 speech calls during a single held sign. | **10-Frame Majority-Vote Filter**: Maintained a rolling `deque(maxlen=10)` prediction buffer. Predictions are confirmed only when \(\ge 7/10\) frames agree, ensuring one clean speech call per intended sign. |
 | **Mirrored On-Screen Text** | `cv2.putText()` was called on raw frame before `cv2.flip()`, rendering text mirrored horizontally. | **Flip-Then-Draw Order**: Skeleton drawn on raw `detection_frame`, then `display_frame = cv2.flip(detection_frame, 1)` is generated, and `cv2.putText()` calls render on `display_frame` so text reads left-to-right. |
 | **First-Only Speech Output** | SAPI5 driver event loop state in `pyttsx3` does not reset cleanly after `runAndWait()` when reusing a single engine object across multiple utterances. | **Per-Utterance Engine Lifecycle**: `pythoncom.CoInitialize()` is invoked once per thread, while `engine = pyttsx3.init()` and `del engine` execute per utterance inside the queue loop. |
-
----
-
-## 6. Viva Defense & Interview Cheat Sheet
-
-#### Q1: Why do you instantiate a fresh `pyttsx3` engine per utterance instead of reusing one instance?
-> **Answer**: On Windows, SAPI5 drivers do not reset internal event loop state reliably after `engine.runAndWait()` is called on a reused engine object across multiple predictions. By calling `engine = pyttsx3.init()` per queued utterance and releasing it with `del engine` inside a COM-initialized background thread (`pythoncom.CoInitialize()`), every prediction plays audibly without stuttering or stopping after the first phrase.

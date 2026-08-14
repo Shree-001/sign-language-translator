@@ -1,22 +1,25 @@
 """
 src/realtime_predict.py
 
-VIVA EXPLANATION — REAL-TIME INFERENCE & MULTI-DIGIT STATE MACHINE
-------------------------------------------------------------------
+VIVA EXPLANATION — REAL-TIME INFERENCE, MAJORITY-VOTE STABILITY & MULTI-DIGIT STATE MACHINE
+-----------------------------------------------------------------------------------------
 1. Dual Model Architecture: Letter classifier (asl_classifier.pkl) and Digit classifier
    (digit_classifier.pkl) are segregated to eliminate misclassification between identical shapes
    (e.g., 1 vs D, 2 vs V, 0 vs O). Mode toggling ('l' / 'n') switches active classifier.
-2. Digit Stability Timer (1.0s): Requires holding a digit sign steady for 1 second before appending
-   to the number buffer. This filters out noisy transition frames between consecutive signs.
+2. 10-Frame Majority-Vote Stability Filter: Maintains a rolling deque(maxlen=10) of raw per-frame
+   predictions. A prediction is only confirmed when >= 7 out of 10 frames agree. This eliminates
+   single-frame jitter and prevents over-triggering audio speech calls.
 3. Hand-Absence Sequence Completion (2.0s): When no hand is in frame for 2 seconds, the multi-digit
    sequence is treated as complete, speaking the full number out loud and resetting the buffer.
-4. Thread-Safe Speech Worker: Persistent queue & single daemon thread for pyttsx3 SAPI5 stability.
+4. Thread-Safe SAPI5 Worker: Persistent queue & single daemon thread with pythoncom.CoInitialize()
+   and per-utterance pyttsx3 engine lifecycle to ensure reliable speech output on Windows.
 """
 
 import os
 import time
 import queue
 import threading
+from collections import deque, Counter
 import cv2
 import joblib
 import pandas as pd
@@ -27,7 +30,6 @@ DIGIT_MODEL_PATH = os.path.join("models", "digit_classifier.pkl")
 
 # Timers & Cooldowns
 LETTER_COOLDOWN = 2.0          # Seconds between letter speech outputs
-DIGIT_STABILITY_HOLD = 1.0     # Seconds to hold a digit sign to confirm & append
 HAND_ABSENT_TIMEOUT = 2.0      # Seconds of no hand before auto-speaking completed number
 
 # Thread-safe persistent TTS Queue & Worker Thread
@@ -87,10 +89,12 @@ if __name__ == "__main__":
     current_mode = "LETTER" if letter_model is not None else "NUMBER"
     feature_cols = [f"{axis}{i}" for i in range(21) for axis in ("x", "y", "z")]
 
+    # Rolling 10-frame majority-vote prediction buffer for noise filtering
+    prediction_buffer = deque(maxlen=10)
+
     # Multi-digit sequencing state machine
     number_buffer = ""
     candidate_digit = None
-    candidate_start_time = 0
     digit_confirmed = False
     last_hand_seen_time = time.time()
 
@@ -128,21 +132,20 @@ if __name__ == "__main__":
         rgb_frame = cv2.cvtColor(detection_frame, cv2.COLOR_BGR2RGB)
         results = hands.process(rgb_frame)
 
-        predicted_label = "No hand"
+        raw_label = "No hand"
+        confirmed_label = "No hand"
         active_model = letter_model if current_mode == "LETTER" else digit_model
 
         if results.multi_hand_landmarks and active_model is not None:
             last_hand_seen_time = time.time()
 
             for idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
-                # Draw skeleton onto raw detection frame before flipping
                 mp_drawing.draw_landmarks(detection_frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
 
                 handedness_label = "Left"
                 if results.multi_handedness and idx < len(results.multi_handedness):
                     handedness_label = results.multi_handedness[idx].classification[0].label
 
-                # Mirror Right hand x-coordinates into Left hand coordinate space
                 if handedness_label == "Right":
                     raw_landmarks = [(-lm.x, lm.y, lm.z) for lm in hand_landmarks.landmark]
                 else:
@@ -154,31 +157,42 @@ if __name__ == "__main__":
                     features.extend([x, y, z])
 
                 features_df = pd.DataFrame([features], columns=feature_cols)
-                predicted_label = str(active_model.predict(features_df)[0])
+                raw_label = str(active_model.predict(features_df)[0])
+                prediction_buffer.append(raw_label)
+
+                # Majority-vote filter: require >= 7 of last 10 frames to agree
+                if len(prediction_buffer) == 10:
+                    most_common, count = Counter(prediction_buffer).most_common(1)[0]
+                    if count >= 7:
+                        confirmed_label = most_common
 
                 current_time = time.time()
 
                 if current_mode == "LETTER":
-                    # Single-frame Letter Mode speech with cooldown
-                    if (current_time - last_spoken_time > LETTER_COOLDOWN) or (predicted_label != last_spoken_label):
-                        speak_text(predicted_label)
-                        last_spoken_time = current_time
-                        last_spoken_label = predicted_label
+                    # Speak confirmed letter only when stabilized
+                    if confirmed_label != "No hand":
+                        if confirmed_label != last_spoken_label:
+                            speak_text(confirmed_label)
+                            last_spoken_label = confirmed_label
+                            last_spoken_time = current_time
+                        elif (current_time - last_spoken_time > LETTER_COOLDOWN):
+                            speak_text(confirmed_label)
+                            last_spoken_time = current_time
 
                 elif current_mode == "NUMBER":
-                    # Multi-Digit Stability State Machine
-                    if predicted_label != candidate_digit:
-                        candidate_digit = predicted_label
-                        candidate_start_time = current_time
-                        digit_confirmed = False
-                    else:
-                        hold_duration = current_time - candidate_start_time
-                        if hold_duration >= DIGIT_STABILITY_HOLD and not digit_confirmed:
-                            number_buffer += candidate_digit
-                            digit_confirmed = True
+                    # Digit sequencing using majority-vote confirmed label
+                    if confirmed_label != "No hand":
+                        if confirmed_label != candidate_digit:
+                            candidate_digit = confirmed_label
+                            digit_confirmed = False
+                        else:
+                            if not digit_confirmed:
+                                number_buffer += candidate_digit
+                                digit_confirmed = True
 
         else:
-            # Hand absent logic for Number Mode sequence completion
+            # Clear rolling prediction buffer and candidate tracking on hand loss
+            prediction_buffer.clear()
             candidate_digit = None
             digit_confirmed = False
 
@@ -194,17 +208,18 @@ if __name__ == "__main__":
 
         # Draw UI Overlay Banners on display_frame so text reads left-to-right (un-mirrored)
         mode_color = (0, 255, 0) if current_mode == "LETTER" else (255, 165, 0)
-        cv2.rectangle(display_frame, (10, 10), (450, 90), (0, 0, 0), -1)
+        cv2.rectangle(display_frame, (10, 10), (480, 90), (0, 0, 0), -1)
         cv2.putText(display_frame, f"MODE: {current_mode}  [n: Number | l: Letter]", (20, 35),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.65, mode_color, 2)
 
+        display_prediction = confirmed_label if confirmed_label != "No hand" else (f"{raw_label} (stabilizing...)" if raw_label != "No hand" else "No hand")
+
         if current_mode == "LETTER":
-            cv2.putText(display_frame, f"Sign: {predicted_label}", (20, 75),
-                        cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+            cv2.putText(display_frame, f"Sign: {display_prediction}", (20, 75),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
         else:
-            status_str = f"Hold: {candidate_digit}" if candidate_digit and not digit_confirmed else f"Sign: {predicted_label}"
-            cv2.putText(display_frame, f"{status_str} | Number: {number_buffer}", (20, 75),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.75, (255, 255, 255), 2)
+            cv2.putText(display_frame, f"Sign: {display_prediction} | Number: {number_buffer}", (20, 75),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
 
         cv2.imshow("ASL Real-Time Translator", display_frame)
 
@@ -214,6 +229,7 @@ if __name__ == "__main__":
         elif key == ord('l'):
             current_mode = "LETTER"
             number_buffer = ""
+            prediction_buffer.clear()
             print("Switched to LETTER Mode.")
         elif key == ord('n'):
             if digit_model is None:
@@ -221,9 +237,11 @@ if __name__ == "__main__":
             else:
                 current_mode = "NUMBER"
                 number_buffer = ""
+                prediction_buffer.clear()
                 print("Switched to NUMBER Mode.")
         elif key == ord('c'):
             number_buffer = ""
+            prediction_buffer.clear()
             print("Cleared number buffer.")
 
     cap.release()
