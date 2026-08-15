@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-08-15 - feat
+- Added **Dynamic (Word-Level) Sign Recognition Mode** (`'d'`) using MediaPipe Holistic (225 keypoint features for hands and upper-body pose) and a PyTorch 2-layer LSTM sequence classifier.
+- Integrated **WLASL Dataset** vocabulary (30 target words including weather queries like `tell`, `weather`, `time`, `what`, `today`, `hot`, `cold`, `rain`, and core conversational glue words like `hello`, `yes`, `no`, `please`, `help`, `thanks`, `sorry`).
+- Created a standalone, decoupled `DynamicWordRecognizer` module (`src/dynamic_word_recognizer.py`) with `predict(sequence) -> (word, confidence)` to serve as the input foundation for a future sentence-assembly and AI assistant layer.
+- Added session history logging (`recognized_word_history`) in `realtime_predict.py` with timestamps to log recognized word sequences across webcam sessions.
+
 ## [1.2.0] - 2026-08-14 - feat
 - Added **Text-to-Sign Mode** (`src/text_to_sign.py`) for reverse ASL translation (text-to-fingerspelling slideshow with text overlay and speech synthesis).
 - Parses letters (A–Z), digits (0–9), and spaces to look up corresponding sign images deterministically from training dataset folders.

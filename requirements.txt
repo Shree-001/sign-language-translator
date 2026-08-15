@@ -6,3 +6,4 @@ scikit-learn
 pyttsx3
 joblib
 matplotlib
+tensorflow>=2.15.0

@@ -1,0 +1,277 @@
+{
+  "selected_words": [
+    "tell",
+    "weather",
+    "time",
+    "what",
+    "today",
+    "hot",
+    "cold",
+    "rain",
+    "hello",
+    "yes",
+    "no",
+    "please",
+    "sorry",
+    "help",
+    "name",
+    "more",
+    "stop",
+    "want",
+    "need",
+    "book",
+    "drink",
+    "computer",
+    "before",
+    "chair",
+    "go",
+    "clothes",
+    "who",
+    "candy",
+    "cousin",
+    "deaf"
+  ],
+  "vocab_summary": {
+    "tell": {
+      "total_samples": 18,
+      "splits": {
+        "train": 13,
+        "val": 3,
+        "test": 2
+      }
+    },
+    "weather": {
+      "total_samples": 13,
+      "splits": {
+        "train": 8,
+        "val": 3,
+        "test": 2
+      }
+    },
+    "time": {
+      "total_samples": 19,
+      "splits": {
+        "train": 14,
+        "val": 3,
+        "test": 2
+      }
+    },
+    "what": {
+      "total_samples": 21,
+      "splits": {
+        "train": 14,
+        "val": 4,
+        "test": 3
+      }
+    },
+    "today": {
+      "total_samples": 14,
+      "splits": {
+        "train": 10,
+        "val": 2,
+        "test": 2
+      }
+    },
+    "hot": {
+      "total_samples": 21,
+      "splits": {
+        "train": 15,
+        "val": 3,
+        "test": 3
+      }
+    },
+    "cold": {
+      "total_samples": 16,
+      "splits": {
+        "train": 11,
+        "val": 3,
+        "test": 2
+      }
+    },
+    "rain": {
+      "total_samples": 13,
+      "splits": {
+        "train": 9,
+        "val": 2,
+        "test": 2
+      }
+    },
+    "hello": {
+      "total_samples": 13,
+      "splits": {
+        "train": 9,
+        "val": 2,
+        "test": 2
+      }
+    },
+    "yes": {
+      "total_samples": 22,
+      "splits": {
+        "train": 15,
+        "val": 4,
+        "test": 3
+      }
+    },
+    "no": {
+      "total_samples": 22,
+      "splits": {
+        "train": 15,
+        "val": 4,
+        "test": 3
+      }
+    },
+    "please": {
+      "total_samples": 15,
+      "splits": {
+        "train": 10,
+        "val": 3,
+        "test": 2
+      }
+    },
+    "sorry": {
+      "total_samples": 14,
+      "splits": {
+        "train": 10,
+        "val": 2,
+        "test": 2
+      }
+    },
+    "help": {
+      "total_samples": 22,
+      "splits": {
+        "train": 15,
+        "val": 4,
+        "test": 3
+      }
+    },
+    "name": {
+      "total_samples": 16,
+      "splits": {
+        "train": 11,
+        "val": 3,
+        "test": 2
+      }
+    },
+    "more": {
+      "total_samples": 15,
+      "splits": {
+        "train": 10,
+        "val": 3,
+        "test": 2
+      }
+    },
+    "stop": {
+      "total_samples": 11,
+      "splits": {
+        "train": 7,
+        "val": 2,
+        "test": 2
+      }
+    },
+    "want": {
+      "total_samples": 19,
+      "splits": {
+        "train": 14,
+        "val": 3,
+        "test": 2
+      }
+    },
+    "need": {
+      "total_samples": 18,
+      "splits": {
+        "train": 13,
+        "val": 3,
+        "test": 2
+      }
+    },
+    "book": {
+      "total_samples": 40,
+      "splits": {
+        "train": 30,
+        "val": 6,
+        "test": 4
+      }
+    },
+    "drink": {
+      "total_samples": 35,
+      "splits": {
+        "train": 25,
+        "val": 6,
+        "test": 4
+      }
+    },
+    "computer": {
+      "total_samples": 30,
+      "splits": {
+        "train": 20,
+        "val": 5,
+        "test": 5
+      }
+    },
+    "before": {
+      "total_samples": 26,
+      "splits": {
+        "train": 18,
+        "val": 4,
+        "test": 4
+      }
+    },
+    "chair": {
+      "total_samples": 26,
+      "splits": {
+        "train": 19,
+        "val": 4,
+        "test": 3
+      }
+    },
+    "go": {
+      "total_samples": 26,
+      "splits": {
+        "train": 19,
+        "val": 4,
+        "test": 3
+      }
+    },
+    "clothes": {
+      "total_samples": 25,
+      "splits": {
+        "train": 18,
+        "val": 4,
+        "test": 3
+      }
+    },
+    "who": {
+      "total_samples": 25,
+      "splits": {
+        "train": 18,
+        "val": 4,
+        "test": 3
+      }
+    },
+    "candy": {
+      "total_samples": 24,
+      "splits": {
+        "train": 17,
+        "val": 4,
+        "test": 3
+      }
+    },
+    "cousin": {
+      "total_samples": 23,
+      "splits": {
+        "train": 16,
+        "val": 4,
+        "test": 3
+      }
+    },
+    "deaf": {
+      "total_samples": 23,
+      "splits": {
+        "train": 16,
+        "val": 4,
+        "test": 3
+      }
+    }
+  },
+  "missing_targets": []
+}
