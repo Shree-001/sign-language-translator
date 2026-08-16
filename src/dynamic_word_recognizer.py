@@ -4,17 +4,17 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-DEFAULT_MODEL_PATH = os.path.join("models", "dynamic_word_classifier.pth")
-DEFAULT_LABELS_PATH = os.path.join("models", "wlasl_labels.json")
+DEFAULT_MODEL_PATH = os.path.join("models", "dynamic_word_classifier_v2.pth")
+DEFAULT_LABELS_PATH = os.path.join("models", "wlasl100_labels.json")
 
-class DynamicWordLSTM(nn.Module):
-    def __init__(self, input_dim=225, hidden_dim=128, num_classes=30):
+class DynamicWordLSTM100(nn.Module):
+    def __init__(self, input_dim=225, hidden_dim=128, num_classes=100):
         super().__init__()
-        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=2, batch_first=True, dropout=0.3)
-        self.fc1 = nn.Linear(hidden_dim, 64)
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=2, batch_first=True, dropout=0.4)
+        self.fc1 = nn.Linear(hidden_dim, 128)
         self.relu = nn.ReLU()
-        self.dropout = nn.Dropout(0.2)
-        self.fc2 = nn.Linear(64, num_classes)
+        self.dropout = nn.Dropout(0.3)
+        self.fc2 = nn.Linear(128, num_classes)
 
     def forward(self, x):
         out, _ = self.lstm(x)
@@ -30,6 +30,7 @@ class DynamicWordRecognizer:
     Standalone, reusable recognizer module for dynamic (word-level) ASL signs.
     Decoupled from webcam and UI logic for easy integration into future
     sentence-assembly, intent-classification, and AI assistant layers.
+    Loaded with WLASL100 100-word benchmark model.
     """
     def __init__(self, model_path=DEFAULT_MODEL_PATH, labels_path=DEFAULT_LABELS_PATH):
         if not os.path.exists(model_path):
@@ -43,7 +44,7 @@ class DynamicWordRecognizer:
         self.label_mapping = {int(k): v for k, v in raw_labels.items()}
         num_classes = len(self.label_mapping)
 
-        self.model = DynamicWordLSTM(input_dim=225, hidden_dim=128, num_classes=num_classes)
+        self.model = DynamicWordLSTM100(input_dim=225, hidden_dim=128, num_classes=num_classes)
         self.model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
         self.model.eval()
 
@@ -76,7 +77,7 @@ class DynamicWordRecognizer:
         return word, confidence
 
 if __name__ == "__main__":
-    print("Testing DynamicWordRecognizer initialization...")
+    print("Testing DynamicWordRecognizer initialization with WLASL100...")
     try:
         recognizer = DynamicWordRecognizer()
         dummy_input = np.zeros((30, 225))

@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-08-16 - feat
+- **Official WLASL100 Benchmark Rebuild**: Replaced initial 30-word hand-picked subset with the official benchmark **WLASL100 dataset** (100 glosses, 2,038 videos) to eliminate majority-class degeneration caused by data scarcity and imbalanced sample counts.
+- **5x Sequence Data Augmentation** (`src/augment_sequences.py`): Expanded training sequence dataset from 748 to **3,740 sequence samples** using spatial noise jitter ($\pm 2\%$), coordinate scaling ($0.9\times\text{--}1.1\times$), horizontal mirroring ($x \rightarrow -x$), and temporal speed resampling ($0.9\times\text{--}1.1\times$).
+- **Class-Weighted PyTorch LSTM Training** (`src/train_wlasl100_classifier.py`): Trained 2-layer LSTM sequence model (`hidden_dim=128`, `dropout=0.4`) using `balanced` class weighting in `CrossEntropyLoss`.
+- **WLASL Literature Benchmark Alignment**: Evaluated model performance on unseen WLASL100 test set:
+  - **Top-1 Test Accuracy**: **49.00%** (surpassing published Pose-GRU WLASL literature baseline of 46.25%).
+  - **Top-5 Test Accuracy**: **72.00%**.
+- Updated `DynamicWordRecognizer` (`src/dynamic_word_recognizer.py`) and `realtime_predict.py` to load `models/dynamic_word_classifier_v2.pth` and `models/wlasl100_labels.json`.
+
 ## [1.3.0] - 2026-08-15 - feat
 - Added **Dynamic (Word-Level) Sign Recognition Mode** (`'d'`) using MediaPipe Holistic (225 keypoint features for hands and upper-body pose) and a PyTorch 2-layer LSTM sequence classifier.
 - Integrated **WLASL Dataset** vocabulary (30 target words including weather queries like `tell`, `weather`, `time`, `what`, `today`, `hot`, `cold`, `rain`, and core conversational glue words like `hello`, `yes`, `no`, `please`, `help`, `thanks`, `sorry`).

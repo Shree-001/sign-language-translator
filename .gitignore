@@ -15,6 +15,7 @@ data/asl_digits/
 data/asl_digits_raw/
 data/wlasl/
 data/wlasl_sequences/
+data/wlasl100_sequences/
 
 # OS / IDE
 .DS_Store
