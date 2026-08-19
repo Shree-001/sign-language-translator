@@ -1,20 +1,21 @@
 # Real-Time ASL Sign Language Translator (Sign-to-Text & Text-to-Sign)
 
-![Version](https://img.shields.io/badge/version-1.4.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)
 
-A lightweight, bidirectional American Sign Language (ASL) translator built with **MediaPipe Hands & Holistic**, **PyTorch (LSTM)**, **Scikit-Learn (RandomForest)**, **OpenCV**, and **pyttsx3**. Offers real-time **Sign-to-Text** webcam translation, **Official WLASL100 Dynamic Sign Recognition (49% Top-1 / 72% Top-5 Test Accuracy)**, and interactive **Text-to-Sign** reverse translation. Designed as input infrastructure for a voice & sign assistant layer.
+A lightweight, bidirectional American Sign Language (ASL) translator built with **MediaPipe Hands & Holistic**, **PyTorch (LSTM)**, **Scikit-Learn (RandomForest)**, **OpenCV**, and **pyttsx3**. Offers real-time **Sign-to-Text** webcam translation, **Official WLASL100 Dynamic Sign Recognition (49% Top-1 / 72% Top-5 Test Accuracy)**, **Paused/Idle Mode ('p')**, and interactive **Text-to-Sign** reverse translation. Designed as input infrastructure for a voice & sign assistant layer.
 
 See [CHANGELOG.md](file:///c:/Users/shrin/sign-language-translator/CHANGELOG.md) for version history and release notes.
 
 ---
 
-## Features & Modes (v1.4.0)
+## Features & Modes (v1.5.0)
 
 ### 1. Multi-Mode Sign-to-Text (`src/realtime_predict.py`)
-- **Tri-Model Architecture**:
+- **Tri-Model Architecture & Controls**:
   - **Alphabet Classifier** (`models/asl_classifier.pkl`): Recognizes letters `A–Z`, `space`, `del` (**99.52% accuracy**). Press `'l'` to activate.
   - **Digit Classifier** (`models/digit_classifier.pkl`): Recognizes numbers `0–9` (**99.43% accuracy**). Press `'n'` to activate.
   - **Dynamic Word Recognizer** (`models/dynamic_word_classifier_v2.pth`): PyTorch 2-layer LSTM sequence model trained on the **Official WLASL100 Benchmark Subset** (100 word classes) with 5x sequence data augmentation and balanced class weighting (**49.00% Top-1 / 72.00% Top-5 Test Accuracy**). Press `'d'` to activate.
+  - **Paused / Idle Mode** (`'p'`): Halts model inference and audio TTS speech to prevent false-positive classifications while resting hands, scratching, or adjusting clothing. Preserves and restores active recognition mode seamlessly upon resuming.
 - **Standalone Recognizer Module (`src/dynamic_word_recognizer.py`)**: Decoupled `DynamicWordRecognizer` class with `predict(sequence) -> (word, confidence)` for easy reuse in sentence-assembly and intent-classification modules.
 - **Session History Logging**: Recognized words are automatically logged to `recognized_word_history` with timestamps for downstream assistant ingestion.
 - **10-Frame Majority-Vote Stability Filter**: Requires \(\ge 7/10\) frame agreement before confirming static gestures.

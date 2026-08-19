@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-08-19 - feat
+- Added **Paused / Idle Mode** (`'p'`) to `src/realtime_predict.py` to halt model inference and audio TTS output without closing the webcam application.
+- Prevents false-positive classifications when the signer is resting hands, adjusting clothing, scratching, or not actively signing.
+- Displays a distinct red/yellow on-screen indicator (`PAUSED -- press 'p' to resume [Mode: X]`).
+- Preserves active mode (`LETTER`, `NUMBER`, or `DYNAMIC_WORD`) and restores it seamlessly upon resuming.
+- Clears all rolling prediction buffers (`prediction_buffer`, `holistic_buffer`, `number_buffer`) on pause and resume to prevent stale data carry-over.
+
 ## [1.4.0] - 2026-08-16 - feat
 - **Official WLASL100 Benchmark Rebuild**: Replaced initial 30-word hand-picked subset with the official benchmark **WLASL100 dataset** (100 glosses, 2,038 videos) to eliminate majority-class degeneration caused by data scarcity and imbalanced sample counts.
 - **5x Sequence Data Augmentation** (`src/augment_sequences.py`): Expanded training sequence dataset from 748 to **3,740 sequence samples** using spatial noise jitter ($\pm 2\%$), coordinate scaling ($0.9\times\text{--}1.1\times$), horizontal mirroring ($x \rightarrow -x$), and temporal speed resampling ($0.9\times\text{--}1.1\times$).

@@ -6,7 +6,9 @@ BIDIRECTIONAL & MULTI-MODE ASL TRANSLATOR INFERENCE APP
 Modes:
 1. LETTER Mode ('l'): Alphabet letters (A–Z, space, del) using asl_classifier.pkl.
 2. NUMBER Mode ('n'): Numbers (0–9) with multi-digit state machine using digit_classifier.pkl.
-3. DYNAMIC WORD Mode ('d'): Dynamic (word-level) signs using MediaPipe Holistic & LSTM model.
+3. DYNAMIC WORD Mode ('d'): Dynamic (word-level) signs using MediaPipe Holistic & PyTorch LSTM model.
+4. PAUSED / IDLE Mode ('p'): Halts gesture recognition and audio speech to prevent false-positive
+   classifications when the signer is resting hands, adjusting clothing, or scratching.
 """
 
 import os
@@ -133,6 +135,11 @@ if __name__ == "__main__":
     current_mode = "LETTER" if letter_model is not None else ("NUMBER" if digit_model is not None else "DYNAMIC_WORD")
     feature_cols = [f"{axis}{i}" for i in range(21) for axis in ("x", "y", "z")]
 
+    # Paused / Idle state tracking
+    # Paused mode halts model inference & TTS output to prevent false-positive recognitions
+    # during natural resting periods, clothing adjustments, or scratching.
+    is_paused = False
+
     # Prediction buffers
     prediction_buffer = deque(maxlen=10)
     holistic_buffer = deque(maxlen=30)  # Rolling 30-frame window for dynamic word mode
@@ -164,7 +171,7 @@ if __name__ == "__main__":
             ret, test_frame = temp_cap.read()
             if ret and test_frame is not None:
                 cap = temp_cap
-                print(f"Webcam initialized on index {cam_idx}. Hotkeys: 'l'=Letter | 'n'=Number | 'd'=Dynamic Word | 'c'=Clear | 'q'=Quit")
+                print(f"Webcam initialized on index {cam_idx}. Hotkeys: 'l'=Letter | 'n'=Number | 'd'=Dynamic Word | 'p'=Pause/Resume | 'c'=Clear | 'q'=Quit")
                 break
             temp_cap.release()
 
@@ -186,142 +193,186 @@ if __name__ == "__main__":
         raw_label = "No hand"
         confirmed_label = "No hand"
 
-        if current_mode in ["LETTER", "NUMBER"]:
-            active_model = letter_model if current_mode == "LETTER" else digit_model
-            results = hands_detector.process(rgb_frame)
+        if is_paused:
+            # When Paused is ON:
+            # 1. Skip model inference entirely (do NOT run through Random Forest or PyTorch LSTM).
+            # 2. Render MediaPipe skeleton for visual user feedback only.
+            # 3. Do NOT queue any TTS audio speech output.
+            if current_mode in ["LETTER", "NUMBER"]:
+                results = hands_detector.process(rgb_frame)
+                if results.multi_hand_landmarks:
+                    for hand_landmarks in results.multi_hand_landmarks:
+                        mp_drawing.draw_landmarks(detection_frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+            elif current_mode == "DYNAMIC_WORD":
+                holistic_results = holistic_detector.process(rgb_frame)
+                if holistic_results.pose_landmarks:
+                    mp_drawing.draw_landmarks(detection_frame, holistic_results.pose_landmarks, mp_holistic.POSE_CONNECTIONS)
+                if holistic_results.left_hand_landmarks:
+                    mp_drawing.draw_landmarks(detection_frame, holistic_results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
+                if holistic_results.right_hand_landmarks:
+                    mp_drawing.draw_landmarks(detection_frame, holistic_results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
 
-            if results.multi_hand_landmarks and active_model is not None:
-                last_hand_seen_time = time.time()
-                for idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
-                    mp_drawing.draw_landmarks(detection_frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
-                    handedness_label = "Left"
-                    if results.multi_handedness and idx < len(results.multi_handedness):
-                        handedness_label = results.multi_handedness[idx].classification[0].label
+        else:
+            # Active Recognition Modes
+            if current_mode in ["LETTER", "NUMBER"]:
+                active_model = letter_model if current_mode == "LETTER" else digit_model
+                results = hands_detector.process(rgb_frame)
 
-                    if handedness_label == "Right":
-                        raw_landmarks = [(-lm.x, lm.y, lm.z) for lm in hand_landmarks.landmark]
-                    else:
-                        raw_landmarks = [(lm.x, lm.y, lm.z) for lm in hand_landmarks.landmark]
+                if results.multi_hand_landmarks and active_model is not None:
+                    last_hand_seen_time = time.time()
+                    for idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
+                        mp_drawing.draw_landmarks(detection_frame, hand_landmarks, mp_hands.HAND_CONNECTIONS)
+                        handedness_label = "Left"
+                        if results.multi_handedness and idx < len(results.multi_handedness):
+                            handedness_label = results.multi_handedness[idx].classification[0].label
 
-                    norm_landmarks = normalize_landmarks(raw_landmarks)
-                    features = []
-                    for x, y, z in norm_landmarks:
-                        features.extend([x, y, z])
+                        if handedness_label == "Right":
+                            raw_landmarks = [(-lm.x, lm.y, lm.z) for lm in hand_landmarks.landmark]
+                        else:
+                            raw_landmarks = [(lm.x, lm.y, lm.z) for lm in hand_landmarks.landmark]
 
-                    features_df = pd.DataFrame([features], columns=feature_cols)
-                    raw_label = str(active_model.predict(features_df)[0])
-                    prediction_buffer.append(raw_label)
+                        norm_landmarks = normalize_landmarks(raw_landmarks)
+                        features = []
+                        for x, y, z in norm_landmarks:
+                            features.extend([x, y, z])
 
-                    if len(prediction_buffer) == 10:
-                        most_common, count = Counter(prediction_buffer).most_common(1)[0]
-                        if count >= 7:
-                            confirmed_label = most_common
+                        features_df = pd.DataFrame([features], columns=feature_cols)
+                        raw_label = str(active_model.predict(features_df)[0])
+                        prediction_buffer.append(raw_label)
 
-                    current_time = time.time()
+                        if len(prediction_buffer) == 10:
+                            most_common, count = Counter(prediction_buffer).most_common(1)[0]
+                            if count >= 7:
+                                confirmed_label = most_common
 
-                    if current_mode == "LETTER":
-                        if confirmed_label != "No hand":
-                            if confirmed_label != last_spoken_label:
-                                speak_text(confirmed_label)
-                                last_spoken_label = confirmed_label
-                                last_spoken_time = current_time
-                            elif (current_time - last_spoken_time > LETTER_COOLDOWN):
-                                speak_text(confirmed_label)
-                                last_spoken_time = current_time
+                        current_time = time.time()
 
-                    elif current_mode == "NUMBER":
-                        if confirmed_label != "No hand":
-                            if confirmed_label != candidate_digit:
-                                candidate_digit = confirmed_label
-                                digit_confirmed = False
-                            else:
-                                if not digit_confirmed:
-                                    number_buffer += candidate_digit
-                                    digit_confirmed = True
-            else:
-                prediction_buffer.clear()
-                candidate_digit = None
-                digit_confirmed = False
+                        if current_mode == "LETTER":
+                            if confirmed_label != "No hand":
+                                if confirmed_label != last_spoken_label:
+                                    speak_text(confirmed_label)
+                                    last_spoken_label = confirmed_label
+                                    last_spoken_time = current_time
+                                elif (current_time - last_spoken_time > LETTER_COOLDOWN):
+                                    speak_text(confirmed_label)
+                                    last_spoken_time = current_time
 
-                if current_mode == "NUMBER" and len(number_buffer) > 0:
-                    absent_duration = time.time() - last_hand_seen_time
-                    if absent_duration >= HAND_ABSENT_TIMEOUT:
-                        print(f"Number Sequence Complete: {number_buffer}")
-                        speak_text(number_buffer)
-                        number_buffer = ""
+                        elif current_mode == "NUMBER":
+                            if confirmed_label != "No hand":
+                                if confirmed_label != candidate_digit:
+                                    candidate_digit = confirmed_label
+                                    digit_confirmed = False
+                                else:
+                                    if not digit_confirmed:
+                                        number_buffer += candidate_digit
+                                        digit_confirmed = True
+                else:
+                    prediction_buffer.clear()
+                    candidate_digit = None
+                    digit_confirmed = False
 
-        elif current_mode == "DYNAMIC_WORD":
-            holistic_results = holistic_detector.process(rgb_frame)
+                    if current_mode == "NUMBER" and len(number_buffer) > 0:
+                        absent_duration = time.time() - last_hand_seen_time
+                        if absent_duration >= HAND_ABSENT_TIMEOUT:
+                            print(f"Number Sequence Complete: {number_buffer}")
+                            speak_text(number_buffer)
+                            number_buffer = ""
 
-            # Draw upper body pose & hands keypoints
-            if holistic_results.pose_landmarks:
-                mp_drawing.draw_landmarks(detection_frame, holistic_results.pose_landmarks, mp_holistic.POSE_CONNECTIONS)
-            if holistic_results.left_hand_landmarks:
-                mp_drawing.draw_landmarks(detection_frame, holistic_results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
-            if holistic_results.right_hand_landmarks:
-                mp_drawing.draw_landmarks(detection_frame, holistic_results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
+            elif current_mode == "DYNAMIC_WORD":
+                holistic_results = holistic_detector.process(rgb_frame)
 
-            # Extract 225-dim holistic feature vector and buffer
-            frame_feat = extract_holistic_features(holistic_results)
-            holistic_buffer.append(frame_feat)
+                # Draw upper body pose & hands keypoints
+                if holistic_results.pose_landmarks:
+                    mp_drawing.draw_landmarks(detection_frame, holistic_results.pose_landmarks, mp_holistic.POSE_CONNECTIONS)
+                if holistic_results.left_hand_landmarks:
+                    mp_drawing.draw_landmarks(detection_frame, holistic_results.left_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
+                if holistic_results.right_hand_landmarks:
+                    mp_drawing.draw_landmarks(detection_frame, holistic_results.right_hand_landmarks, mp_holistic.HAND_CONNECTIONS)
 
-            # Run prediction when 30 frames buffered & cooldown elapsed
-            current_time = time.time()
-            if len(holistic_buffer) == 30 and (current_time - last_word_prediction_time > WORD_COOLDOWN):
-                if word_recognizer is not None:
-                    seq_array = np.array(holistic_buffer)
-                    predicted_word, conf = word_recognizer.predict(seq_array)
-                    if conf >= 0.5:
-                        latest_word_prediction = predicted_word
-                        latest_word_confidence = conf
-                        last_word_prediction_time = current_time
+                # Extract 225-dim holistic feature vector and buffer
+                frame_feat = extract_holistic_features(holistic_results)
+                holistic_buffer.append(frame_feat)
 
-                        # Append to session history log
-                        entry = {"timestamp": current_time, "word": predicted_word, "confidence": conf}
-                        recognized_word_history.append(entry)
-                        print(f"[Dynamic Word Logged] '{predicted_word}' ({conf*100:.1f}%) | Total history: {len(recognized_word_history)} words")
+                # Run prediction when 30 frames buffered & cooldown elapsed
+                current_time = time.time()
+                if len(holistic_buffer) == 30 and (current_time - last_word_prediction_time > WORD_COOLDOWN):
+                    if word_recognizer is not None:
+                        seq_array = np.array(holistic_buffer)
+                        predicted_word, conf = word_recognizer.predict(seq_array)
+                        if conf >= 0.5:
+                            latest_word_prediction = predicted_word
+                            latest_word_confidence = conf
+                            last_word_prediction_time = current_time
 
-                        # Audio TTS
-                        speak_text(predicted_word)
+                            # Append to session history log
+                            entry = {"timestamp": current_time, "word": predicted_word, "confidence": conf}
+                            recognized_word_history.append(entry)
+                            print(f"[Dynamic Word Logged] '{predicted_word}' ({conf*100:.1f}%) | Total history: {len(recognized_word_history)} words")
+
+                            # Audio TTS
+                            speak_text(predicted_word)
 
         # Mirror frame for display
         display_frame = cv2.flip(detection_frame, 1)
 
         # UI Banners
-        if current_mode == "LETTER":
-            mode_color = (0, 255, 0)
-        elif current_mode == "NUMBER":
-            mode_color = (255, 165, 0)
-        else:
-            mode_color = (255, 0, 255)  # Purple for Dynamic Word
-
-        cv2.rectangle(display_frame, (10, 10), (600, 90), (0, 0, 0), -1)
-        cv2.putText(display_frame, f"MODE: {current_mode} [l: Letter | n: Number | d: Dynamic Word]", (20, 35),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, mode_color, 2)
-
-        if current_mode == "LETTER":
-            disp = confirmed_label if confirmed_label != "No hand" else (f"{raw_label}..." if raw_label != "No hand" else "No hand")
-            cv2.putText(display_frame, f"Sign: {disp}", (20, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
-        elif current_mode == "NUMBER":
-            disp = confirmed_label if confirmed_label != "No hand" else (f"{raw_label}..." if raw_label != "No hand" else "No hand")
-            cv2.putText(display_frame, f"Sign: {disp} | Number: {number_buffer}", (20, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        elif current_mode == "DYNAMIC_WORD":
-            buf_len = len(holistic_buffer)
-            history_str = " ".join([h["word"] for h in recognized_word_history[-5:]])
-            cv2.putText(display_frame, f"Word: {latest_word_prediction} ({latest_word_confidence*100:.0f}%) [Buff: {buf_len}/30]", (20, 65),
+        if is_paused:
+            # Distinct Red/Yellow Paused Banner
+            cv2.rectangle(display_frame, (10, 10), (620, 90), (0, 0, 180), -1)
+            cv2.putText(display_frame, f"PAUSED -- press 'p' to resume [Mode: {current_mode}]", (20, 38),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
+            cv2.putText(display_frame, "Recognition & Audio Speech HALTED", (20, 75),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
-            cv2.putText(display_frame, f"History: {history_str}", (20, 85),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1)
+        else:
+            if current_mode == "LETTER":
+                mode_color = (0, 255, 0)
+            elif current_mode == "NUMBER":
+                mode_color = (255, 165, 0)
+            else:
+                mode_color = (255, 0, 255)  # Purple for Dynamic Word
+
+            cv2.rectangle(display_frame, (10, 10), (620, 90), (0, 0, 0), -1)
+            cv2.putText(display_frame, f"MODE: {current_mode} [l: Letter | n: Number | d: Dynamic | p: Pause]", (20, 35),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, mode_color, 2)
+
+            if current_mode == "LETTER":
+                disp = confirmed_label if confirmed_label != "No hand" else (f"{raw_label}..." if raw_label != "No hand" else "No hand")
+                cv2.putText(display_frame, f"Sign: {disp}", (20, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+            elif current_mode == "NUMBER":
+                disp = confirmed_label if confirmed_label != "No hand" else (f"{raw_label}..." if raw_label != "No hand" else "No hand")
+                cv2.putText(display_frame, f"Sign: {disp} | Number: {number_buffer}", (20, 75), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            elif current_mode == "DYNAMIC_WORD":
+                buf_len = len(holistic_buffer)
+                history_str = " ".join([h["word"] for h in recognized_word_history[-5:]])
+                cv2.putText(display_frame, f"Word: {latest_word_prediction} ({latest_word_confidence*100:.0f}%) [Buff: {buf_len}/30]", (20, 65),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
+                cv2.putText(display_frame, f"History: {history_str}", (20, 85),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.45, (200, 200, 200), 1)
 
         cv2.imshow("ASL Real-Time Translator", display_frame)
 
         key = cv2.waitKey(1) & 0xFF
         if key == ord('q'):
             break
+        elif key == ord('p'):
+            is_paused = not is_paused
+            # Clear all prediction and sequence buffers when toggling paused state
+            prediction_buffer.clear()
+            holistic_buffer.clear()
+            number_buffer = ""
+            candidate_digit = None
+            digit_confirmed = False
+
+            if is_paused:
+                print(f"[PAUSED] Recognition halted. Current mode preserved: {current_mode}. Press 'p' to resume.")
+            else:
+                print(f"[RESUMED] Recognition active. Resumed mode: {current_mode}.")
+
         elif key == ord('l'):
             current_mode = "LETTER"
             number_buffer = ""
             prediction_buffer.clear()
+            holistic_buffer.clear()
             print("Switched to LETTER Mode.")
         elif key == ord('n'):
             if digit_model is None:
@@ -330,17 +381,20 @@ if __name__ == "__main__":
                 current_mode = "NUMBER"
                 number_buffer = ""
                 prediction_buffer.clear()
+                holistic_buffer.clear()
                 print("Switched to NUMBER Mode.")
         elif key == ord('d'):
             if word_recognizer is None:
                 print("Dynamic Word Recognizer not trained yet! Run training pipeline first.")
             else:
                 current_mode = "DYNAMIC_WORD"
+                prediction_buffer.clear()
                 holistic_buffer.clear()
                 print("Switched to DYNAMIC WORD Mode.")
         elif key == ord('c'):
             number_buffer = ""
             prediction_buffer.clear()
+            holistic_buffer.clear()
             recognized_word_history.clear()
             print("Cleared buffers and word history.")
 
