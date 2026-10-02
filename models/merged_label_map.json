@@ -1,0 +1,22 @@
+{
+  "label_to_idx": {
+    "hello": 0,
+    "thank_you": 1,
+    "yes": 2,
+    "no": 3,
+    "please": 4,
+    "how_are_you": 5,
+    "my_name": 6,
+    "nice_to_meet_you": 7
+  },
+  "idx_to_label": {
+    "0": "hello",
+    "1": "thank_you",
+    "2": "yes",
+    "3": "no",
+    "4": "please",
+    "5": "how_are_you",
+    "6": "my_name",
+    "7": "nice_to_meet_you"
+  }
+}

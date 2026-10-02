@@ -1,87 +1,67 @@
+"""
+src/dynamic_word_recognizer.py
+
+Standalone, decoupled Dynamic Word Recognizer module for 8-class ASL word recognition.
+Uses PyTorch LSTM model trained on 225-dim MediaPipe Holistic features.
+Can be imported by realtime_predict.py or downstream sentence-assembly & AI assistant modules.
+"""
+
 import os
 import json
 import numpy as np
 import torch
 import torch.nn as nn
 
-DEFAULT_MODEL_PATH = os.path.join("models", "dynamic_word_classifier_v2.pth")
-DEFAULT_LABELS_PATH = os.path.join("models", "wlasl100_labels.json")
-
-class DynamicWordLSTM100(nn.Module):
-    def __init__(self, input_dim=225, hidden_dim=128, num_classes=100):
-        super().__init__()
-        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=2, batch_first=True, dropout=0.4)
-        self.fc1 = nn.Linear(hidden_dim, 128)
+class PyTorchLSTMClassifier(nn.Module):
+    def __init__(self, input_dim=225, hidden_dim=64, num_classes=8, num_layers=2):
+        super(PyTorchLSTMClassifier, self).__init__()
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=num_layers, batch_first=True, dropout=0.3)
+        self.fc1 = nn.Linear(hidden_dim, 64)
         self.relu = nn.ReLU()
         self.dropout = nn.Dropout(0.3)
-        self.fc2 = nn.Linear(128, num_classes)
-
+        self.fc2 = nn.Linear(64, num_classes)
+        
     def forward(self, x):
         out, _ = self.lstm(x)
-        last_out = out[:, -1, :]
-        x = self.fc1(last_out)
-        x = self.relu(x)
-        x = self.dropout(x)
-        logits = self.fc2(x)
-        return logits
+        out = out[:, -1, :] # Take last time step
+        out = self.fc1(out)
+        out = self.relu(out)
+        out = self.dropout(out)
+        out = self.fc2(out)
+        return out
 
 class DynamicWordRecognizer:
-    """
-    Standalone, reusable recognizer module for dynamic (word-level) ASL signs.
-    Decoupled from webcam and UI logic for easy integration into future
-    sentence-assembly, intent-classification, and AI assistant layers.
-    Loaded with WLASL100 100-word benchmark model.
-    """
-    def __init__(self, model_path=DEFAULT_MODEL_PATH, labels_path=DEFAULT_LABELS_PATH):
+    def __init__(self, model_path="models/merged_dynamic_classifier.pth", label_map_path="models/merged_label_map.json"):
         if not os.path.exists(model_path):
-            raise FileNotFoundError(f"Model file not found at: {model_path}")
-        if not os.path.exists(labels_path):
-            raise FileNotFoundError(f"Labels mapping not found at: {labels_path}")
-
-        with open(labels_path, "r", encoding="utf-8") as f:
-            raw_labels = json.load(f)
+            raise FileNotFoundError(f"Model file missing: {model_path}. Run train_merged_dynamic_classifier.py first.")
+        if not os.path.exists(label_map_path):
+            raise FileNotFoundError(f"Label map file missing: {label_map_path}.")
+            
+        with open(label_map_path, "r") as f:
+            label_data = json.load(f)
+            
+        self.idx_to_label = {int(k): v for k, v in label_data["idx_to_label"].items()}
+        self.label_to_idx = label_data["label_to_idx"]
+        num_classes = len(self.idx_to_label)
         
-        self.label_mapping = {int(k): v for k, v in raw_labels.items()}
-        num_classes = len(self.label_mapping)
-
-        self.model = DynamicWordLSTM100(input_dim=225, hidden_dim=128, num_classes=num_classes)
-        self.model.load_state_dict(torch.load(model_path, map_location=torch.device('cpu')))
+        self.model = PyTorchLSTMClassifier(input_dim=225, hidden_dim=64, num_classes=num_classes, num_layers=2)
+        self.model.load_state_dict(torch.load(model_path, weights_only=True))
         self.model.eval()
 
-    def predict(self, landmark_sequence):
+    def predict(self, landmark_sequence) -> tuple:
         """
-        Predicts word label and confidence score from a 30-frame landmark sequence.
-        
-        Parameters:
-            landmark_sequence (np.ndarray): Shape (30, 225) or (1, 30, 225)
+        Input: landmark_sequence of shape (30, 225)
+        Returns: (predicted_word: str, confidence: float)
+        """
+        seq_arr = np.array(landmark_sequence, dtype=np.float32)
+        if seq_arr.shape != (30, 225):
+            return ("Unknown", 0.0)
             
-        Returns:
-            tuple: (word_string, confidence_float)
-        """
-        seq = np.array(landmark_sequence, dtype=np.float32)
-        if seq.ndim == 2:
-            seq = np.expand_dims(seq, axis=0)
-
-        if seq.shape[1:] != (30, 225):
-            raise ValueError(f"Expected input shape (1, 30, 225), but got {seq.shape}")
-
-        tensor_in = torch.from_numpy(seq)
+        input_tensor = torch.tensor(seq_arr, dtype=torch.float32).unsqueeze(0) # (1, 30, 225)
         with torch.no_grad():
-            logits = self.model(tensor_in)
-            probs = torch.softmax(logits, dim=1).numpy()[0]
-
-        best_idx = int(np.argmax(probs))
-        confidence = float(probs[best_idx])
-        word = self.label_mapping.get(best_idx, "unknown")
-
-        return word, confidence
-
-if __name__ == "__main__":
-    print("Testing DynamicWordRecognizer initialization with WLASL100...")
-    try:
-        recognizer = DynamicWordRecognizer()
-        dummy_input = np.zeros((30, 225))
-        word, conf = recognizer.predict(dummy_input)
-        print(f"Sanity test prediction: Word='{word}', Confidence={conf:.4f}")
-    except Exception as e:
-        print(f"Note: {e}")
+            outputs = self.model(input_tensor)
+            probs = torch.softmax(outputs, dim=1)[0]
+            top_idx = torch.argmax(probs).item()
+            confidence = float(probs[top_idx].item())
+            
+        return (self.idx_to_label[top_idx], confidence)

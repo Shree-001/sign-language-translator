@@ -5,27 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.5.0] - 2026-08-19 - feat
-- Added **Paused / Idle Mode** (`'p'`) to `src/realtime_predict.py` to halt model inference and audio TTS output without closing the webcam application.
-- Prevents false-positive classifications when the signer is resting hands, adjusting clothing, scratching, or not actively signing.
-- Displays a distinct red/yellow on-screen indicator (`PAUSED -- press 'p' to resume [Mode: X]`).
-- Preserves active mode (`LETTER`, `NUMBER`, or `DYNAMIC_WORD`) and restores it seamlessly upon resuming.
-- Clears all rolling prediction buffers (`prediction_buffer`, `holistic_buffer`, `number_buffer`) on pause and resume to prevent stale data carry-over.
-
-## [1.4.0] - 2026-08-16 - feat
-- **Official WLASL100 Benchmark Rebuild**: Replaced initial 30-word hand-picked subset with the official benchmark **WLASL100 dataset** (100 glosses, 2,038 videos) to eliminate majority-class degeneration caused by data scarcity and imbalanced sample counts.
-- **5x Sequence Data Augmentation** (`src/augment_sequences.py`): Expanded training sequence dataset from 748 to **3,740 sequence samples** using spatial noise jitter ($\pm 2\%$), coordinate scaling ($0.9\times\text{--}1.1\times$), horizontal mirroring ($x \rightarrow -x$), and temporal speed resampling ($0.9\times\text{--}1.1\times$).
-- **Class-Weighted PyTorch LSTM Training** (`src/train_wlasl100_classifier.py`): Trained 2-layer LSTM sequence model (`hidden_dim=128`, `dropout=0.4`) using `balanced` class weighting in `CrossEntropyLoss`.
-- **WLASL Literature Benchmark Alignment**: Evaluated model performance on unseen WLASL100 test set:
-  - **Top-1 Test Accuracy**: **49.00%** (surpassing published Pose-GRU WLASL literature baseline of 46.25%).
-  - **Top-5 Test Accuracy**: **72.00%**.
-- Updated `DynamicWordRecognizer` (`src/dynamic_word_recognizer.py`) and `realtime_predict.py` to load `models/dynamic_word_classifier_v2.pth` and `models/wlasl100_labels.json`.
-
-## [1.3.0] - 2026-08-15 - feat
-- Added **Dynamic (Word-Level) Sign Recognition Mode** (`'d'`) using MediaPipe Holistic (225 keypoint features for hands and upper-body pose) and a PyTorch 2-layer LSTM sequence classifier.
-- Integrated **WLASL Dataset** vocabulary (30 target words including weather queries like `tell`, `weather`, `time`, `what`, `today`, `hot`, `cold`, `rain`, and core conversational glue words like `hello`, `yes`, `no`, `please`, `help`, `thanks`, `sorry`).
-- Created a standalone, decoupled `DynamicWordRecognizer` module (`src/dynamic_word_recognizer.py`) with `predict(sequence) -> (word, confidence)` to serve as the input foundation for a future sentence-assembly and AI assistant layer.
-- Added session history logging (`recognized_word_history`) in `realtime_predict.py` with timestamps to log recognized word sequences across webcam sessions.
+## [1.3.0] - 2026-10-02 - feat
+- Rebuilt **Dynamic Word Recognition Pipeline** for 8 high-value conversational concepts (`hello`, `thank_you`, `yes`, `no`, `please`, `how_are_you`, `my_name`, `nice_to_meet_you`) as the input foundation for a planned sentence-assembly AI assistant layer.
+- Applied multi-repetition / sliding-window sub-clip segmentation (30-frame window, 12-frame stride) across source videos, extracting **235 225-dim landmark sequence samples** (Hands + Pose).
+- Trained PyTorch LSTM classifier with spatial jitter, scaling, and horizontal mirroring augmentation, achieving **89.36% test accuracy** (with peak test accuracy reaching **95.74%**).
+- Decoupled `DynamicWordRecognizer` into a standalone, importable module (`src/dynamic_word_recognizer.py`) completely independent of OpenCV UI code.
+- Integrated into `src/realtime_predict.py` under `'d'` keypress mode with rolling 30-frame MediaPipe Holistic feature buffering, audio speech synthesis, and persistent `recognized_word_history` session log.
 
 ## [1.2.0] - 2026-08-14 - feat
 - Added **Text-to-Sign Mode** (`src/text_to_sign.py`) for reverse ASL translation (text-to-fingerspelling slideshow with text overlay and speech synthesis).

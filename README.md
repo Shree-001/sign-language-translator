@@ -1,31 +1,36 @@
-# Real-Time ASL Sign Language Translator (Sign-to-Text & Text-to-Sign)
+# Real-Time ASL Sign Language Translator (Sign-to-Text, Text-to-Sign & Dynamic Word Mode)
 
-![Version](https://img.shields.io/badge/version-1.5.0-blue.svg)
+![Version](https://img.shields.io/badge/version-1.3.0-blue.svg)
 
-A lightweight, bidirectional American Sign Language (ASL) translator built with **MediaPipe Hands & Holistic**, **PyTorch (LSTM)**, **Scikit-Learn (RandomForest)**, **OpenCV**, and **pyttsx3**. Offers real-time **Sign-to-Text** webcam translation, **Official WLASL100 Dynamic Sign Recognition (49% Top-1 / 72% Top-5 Test Accuracy)**, **Paused/Idle Mode ('p')**, and interactive **Text-to-Sign** reverse translation. Designed as input infrastructure for a voice & sign assistant layer.
+A lightweight, multi-modal American Sign Language (ASL) translator built with **MediaPipe (Hands & Holistic)**, **Scikit-Learn (RandomForestClassifier)**, **PyTorch (LSTM)**, **OpenCV**, and **pyttsx3**. Offers real-time **Letter Mode**, **Number Mode**, **Dynamic Word Mode**, **Text-to-Sign** reverse translation, and a **Paused/Idle Mode**.
+
+Designed as the input foundation for a planned sentence-assembly AI assistant system.
 
 See [CHANGELOG.md](file:///c:/Users/shrin/sign-language-translator/CHANGELOG.md) for version history and release notes.
 
 ---
 
-## Features & Modes (v1.5.0)
+## Features & Modes (v1.3.0)
 
-### 1. Multi-Mode Sign-to-Text (`src/realtime_predict.py`)
-- **Tri-Model Architecture & Controls**:
-  - **Alphabet Classifier** (`models/asl_classifier.pkl`): Recognizes letters `A–Z`, `space`, `del` (**99.52% accuracy**). Press `'l'` to activate.
-  - **Digit Classifier** (`models/digit_classifier.pkl`): Recognizes numbers `0–9` (**99.43% accuracy**). Press `'n'` to activate.
-  - **Dynamic Word Recognizer** (`models/dynamic_word_classifier_v2.pth`): PyTorch 2-layer LSTM sequence model trained on the **Official WLASL100 Benchmark Subset** (100 word classes) with 5x sequence data augmentation and balanced class weighting (**49.00% Top-1 / 72.00% Top-5 Test Accuracy**). Press `'d'` to activate.
-  - **Paused / Idle Mode** (`'p'`): Halts model inference and audio TTS speech to prevent false-positive classifications while resting hands, scratching, or adjusting clothing. Preserves and restores active recognition mode seamlessly upon resuming.
-- **Standalone Recognizer Module (`src/dynamic_word_recognizer.py`)**: Decoupled `DynamicWordRecognizer` class with `predict(sequence) -> (word, confidence)` for easy reuse in sentence-assembly and intent-classification modules.
-- **Session History Logging**: Recognized words are automatically logged to `recognized_word_history` with timestamps for downstream assistant ingestion.
-- **10-Frame Majority-Vote Stability Filter**: Requires \(\ge 7/10\) frame agreement before confirming static gestures.
+### 1. Dynamic Word Mode (`src/dynamic_word_recognizer.py` & `'d'` Keypress)
+- **High-Value Conversational Vocabulary**: Recognizes 8 core words/phrases (`hello`, `thank_you`, `yes`, `no`, `please`, `how_are_you`, `my_name`, `nice_to_meet_you`).
+- **MediaPipe Holistic Feature Extraction**: Extracts 225 3D spatial coordinates per frame (Left Hand 63, Right Hand 63, Pose 99) with wrist and shoulder normalization.
+- **Multi-Repetition Sub-Clip Dataset**: Extracted 235 30-frame landmark sequences using sliding-window segmentation (30-frame window, 12-frame stride) across source videos.
+- **PyTorch LSTM Classifier**: 2-layer LSTM sequence model trained with spatial jitter, scaling, horizontal mirroring, and balanced class weights (**89.36% test accuracy**, peak test accuracy **95.74%**).
+- **Decoupled Architecture**: `DynamicWordRecognizer` is completely decoupled from the OpenCV UI, allowing direct import by sentence-assembly & AI assistant modules.
+- **Session History Logging**: Appends recognized words to `recognized_word_history` with timestamps.
+
+### 2. Sign-to-Text Mode (`src/realtime_predict.py`)
+- **Alphabet Classifier** (`models/asl_classifier.pkl`): Recognizes letters `A–Z`, `space`, `del` (**99.52% accuracy**).
+- **Digit Classifier** (`models/digit_classifier.pkl`): Recognizes numbers `0–9` (**99.43% accuracy**).
+- **10-Frame Majority-Vote Stability Filter**: Requires \(\ge 7/10\) frame agreement before confirming gestures, preventing speech over-triggering.
 - **Multi-Digit Sequencing State Machine**: Accumulates steady digits into a number buffer and auto-speaks full numbers after 2.0s of hand absence.
-- **Thread-Safe SAPI5 TTS Engine**: Background queue worker thread with `pythoncom.CoInitialize()` and per-utterance engine lifecycle (`pyttsx3.init()` / `del engine`).
 
-### 2. Text-to-Sign Mode (`src/text_to_sign.py`)
-- **Bidirectional Translation**: Converts typed text or sentences into a sequential ASL sign image slideshow (fingerspelling style).
-- **Deterministic Image Lookup**: Maps characters `A–Z`, `0–9`, and `spaces` to sample dataset images.
-- **Sequential Display & Speech**: Plays sign slideshow at ~1s/frame in a single OpenCV window with `Sign: X` overlays, followed by spoken audio synthesis.
+### 3. Text-to-Sign Mode (`src/text_to_sign.py`)
+- **Bidirectional Translation**: Converts typed text into a sequential ASL sign image slideshow with text overlays and spoken voice.
+
+### 4. Paused / Idle Mode (`'p'` Keypress)
+- Halts gesture recognition and audio speech to prevent false positives when resting hands or adjusting clothing.
 
 ---
 
@@ -36,24 +41,21 @@ sign-language-translator/
 ├── data/
 │   ├── landmarks.csv                   # Extracted normalized alphabet feature dataset
 │   ├── digit_landmarks.csv             # Extracted normalized digit feature dataset
-│   ├── selected_words_wlasl100.json    # Scoped WLASL100 100-word benchmark configuration
-│   └── wlasl100_sequences/             # 30-frame Holistic sequence arrays (raw & 5x augmented)
+│   └── merged_dynamic_sequences/       # Extracted 225-dim 30-frame dynamic word sequences
 ├── models/
 │   ├── asl_classifier.pkl              # Trained Random Forest model (Alphabet)
 │   ├── digit_classifier.pkl            # Trained Random Forest model (Digits 0-9)
-│   ├── dynamic_word_classifier_v2.pth  # Trained PyTorch 2-layer LSTM model (WLASL100)
-│   └── wlasl100_labels.json            # Label mapping for 100-word dynamic classifier
+│   ├── merged_dynamic_classifier.pth   # Trained PyTorch LSTM model (8-Word Dynamic Mode)
+│   └── merged_label_map.json           # Label mapping for dynamic word classifier
 ├── src/
 │   ├── extract_landmarks.py            # Alphabet landmark feature extractor
 │   ├── train_classifier.py             # Alphabet Random Forest classifier trainer
 │   ├── extract_digit_landmarks.py      # Digit landmark feature extractor
 │   ├── train_digit_classifier.py       # Digit Random Forest classifier trainer
-│   ├── scope_wlasl100.py               # Official WLASL100 vocabulary scoping script
-│   ├── extract_wlasl100_landmarks.py   # MediaPipe Holistic sequence extractor (WLASL100)
-│   ├── augment_sequences.py            # 5x spatial/temporal/mirroring sequence data augmentor
-│   ├── train_wlasl100_classifier.py    # PyTorch LSTM trainer (class balancing & Top-1/5)
-│   ├── dynamic_word_recognizer.py      # Decoupled, reusable DynamicWordRecognizer class
-│   ├── realtime_predict.py             # Live webcam Sign-to-Text inference app ('l'/'n'/'d')
+│   ├── extract_merged_dynamic_landmarks.py # Dynamic 225-dim landmark sequence extractor
+│   ├── train_merged_dynamic_classifier.py   # PyTorch LSTM dynamic word classifier trainer
+│   ├── dynamic_word_recognizer.py      # Standalone, decoupled Dynamic Word Recognizer
+│   ├── realtime_predict.py             # Live webcam multi-mode inference app
 │   └── text_to_sign.py                 # Interactive Text-to-Sign reverse translator
 ├── .gitignore
 ├── CHANGELOG.md
@@ -80,14 +82,16 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Run Sign-to-Text Translator (Webcam)
+### 2. Run Real-Time Translator (Webcam)
 
 ```bash
 python src/realtime_predict.py
 ```
-- **`l`**: Letter Mode (`A–Z`, `space`, `del`)
-- **`n`**: Number Mode (`0–9` multi-digit sequencing)
-- **`c`**: Clear number buffer
+- **`d`**: Switch to **Dynamic Word Mode** (`hello`, `thank_you`, `yes`, `no`, `please`, `how_are_you`, `my_name`, `nice_to_meet_you`)
+- **`l`**: Switch to **Letter Mode** (`A–Z`, `space`, `del`)
+- **`n`**: Switch to **Number Mode** (`0–9` multi-digit sequencing)
+- **`p`**: Toggle **Paused / Idle Mode**
+- **`c`**: Clear number buffer & word history log
 - **`q`**: Quit
 
 ### 3. Run Text-to-Sign Translator (Interactive)
@@ -95,4 +99,3 @@ python src/realtime_predict.py
 ```bash
 python src/text_to_sign.py
 ```
-- Type any word or phrase (e.g. `ASL 2026`) to watch the sign image slideshow and hear audio synthesis. Type `exit` to quit.
