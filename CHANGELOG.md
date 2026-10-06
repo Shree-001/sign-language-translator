@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.1] - 2026-10-06 - fix
+- Fixed `WORD_MODEL_PATH` in `src/realtime_predict.py` pointing to non-existent `.h5` file; corrected to `.pth` (the actual PyTorch checkpoint format saved by the LSTM trainer).
+- Downgraded `mediapipe` from `1.0.1` → `0.10.21` in venv311; the `1.x` series dropped `mp.solutions.*` entirely (Tasks API rewrite), breaking all three detection pipelines. `0.10.21` is the last version with the legacy solutions API.
+
 ## [1.3.0] - 2026-10-02 - feat
 - Rebuilt **Dynamic Word Recognition Pipeline** for 8 high-value conversational concepts (`hello`, `thank_you`, `yes`, `no`, `please`, `how_are_you`, `my_name`, `nice_to_meet_you`) as the input foundation for a planned sentence-assembly AI assistant layer.
 - Applied multi-repetition / sliding-window sub-clip segmentation (30-frame window, 12-frame stride) across source videos, extracting **235 225-dim landmark sequence samples** (Hands + Pose).

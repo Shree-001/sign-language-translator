@@ -24,7 +24,7 @@ import mediapipe as mp
 
 LETTER_MODEL_PATH = os.path.join("models", "asl_classifier.pkl")
 DIGIT_MODEL_PATH = os.path.join("models", "digit_classifier.pkl")
-WORD_MODEL_PATH = os.path.join("models", "merged_dynamic_classifier.h5")
+WORD_MODEL_PATH = os.path.join("models", "merged_dynamic_classifier.pth")
 
 # Timers & Cooldowns
 LETTER_COOLDOWN = 2.0          # Seconds between letter speech outputs
